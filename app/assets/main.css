@@ -1,0 +1,10 @@
+html, body {
+    padding: 10px;
+}
+#sim-container {
+    min-width: 500px;
+    min-height: 500px;
+    width: 900px;
+    height: 900px;
+    background: #000;
+}
