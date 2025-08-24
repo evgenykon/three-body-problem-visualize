@@ -23,7 +23,7 @@ function createLights() {
     const ambientLight = new THREE.AmbientLight(0x404040, 0.8);
     const directionalLight = new THREE.DirectionalLight(0xffffff, 0.9);
     directionalLight.castShadow = true; // Включаем тени для направленного света
-    directionalLight.position.set(15, 100, 15);
+    directionalLight.position.set(-15, 50, 15);
     return { ambientLight, directionalLight };
 }
 

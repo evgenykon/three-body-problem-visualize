@@ -1,6 +1,5 @@
 
-<script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
-<script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script>
+
 <script src="/assets/sceneFunctions.js"></script>
 
 <h1>01 - Механика - Сила, Ускорение</h1> 
@@ -64,6 +63,28 @@
         Сила трения зависит от коэффициента трения (μ) и нормальной силы (N), которая в данном случае равна массе объекта,
          умноженной на ускорение свободного падения (g).</p>
 
+    <h5>Формулы</h5>
+    <p>Основная формула, связывающая силу, массу и ускорение, известна как второй закон Ньютона:</p>
+    <p  style="text-align: left;">
+        \[F = m \cdot a\]
+    </p>
+    <p>где:
+        <ul>
+            <li>\(F\) - сила (в ньютонах, N)</li>
+            <li>\(m\) - масса (в килограммах, kg)</li>
+            <li>\(a\) - ускорение (в метрах на секунду в квадрате, m/s²)</li>
+        </ul>
+    </p>
+    <p>Сила трения рассчитывается по формуле:</p>
+    <p>\[F_{fr} = \mu \cdot N\]</p>
+    <p>где:
+        <ul>
+            <li>\(F_{fr}\) - сила трения (в ньютонах, N)</li>
+            <li>\(\mu\) - коэффициент трения (безразмерная величина)</li>
+            <li>\(N\) - нормальная сила (в ньютонах, N), которая в данном случае равна массе объекта, умноженной на ускорение свободного падения (g)</li>
+        </ul>
+    </p>
+
 </article>
 
 <script>
@@ -73,7 +94,8 @@
         force: 1,
         friction: 0.05,
         mass: 1,
-        fps: 60
+        fps: 60,
+        time: 0,
     };
     const viewSize = 800;
     const gridConfig = {
@@ -117,9 +139,9 @@
 
     // Создание кубика
     const objGeometry = new THREE.BoxGeometry(1, 1, 1);
-    const soccerTexture = new THREE.TextureLoader().load('/assets/ball-texture.png');
+    const texture = new THREE.TextureLoader().load('/assets/ball-texture.png');
     const objMaterial = new THREE.MeshStandardMaterial({
-        map: soccerTexture,
+        map: texture,
         roughness: 0.8,
         metalness: 0.1,
         normalScale: new THREE.Vector2(1, 1)
@@ -163,11 +185,12 @@
     function runSimulation() {
         setSimulationParameters();
         obj.position.set(0, vars.startHeight, 0);
-        velocity.set(vars.force, 0, 0);
+        const mass = 1; // (vars.mass > 0 ? vars.mass : 0.01);
+        velocity.set(vars.force / mass, 0, 0);
         statValues.maxSpeed = 0;
         document.getElementById('maxSpeed').textContent = statValues.maxSpeed;
         isMoving = true;
-        
+        vars.time = 0;
     }
 
     // Функция анимации
@@ -175,20 +198,33 @@
         requestAnimationFrame(animate);
 
         if (isMoving) {
-            const fps = (vars.fps > 0 ? vars.fps : 0.016);
-            // Применяем силу трения
-            const frictionForce = vars.friction * vars.mass * vars.gravity; // F_friction = μ * N, где N = m * g, при m=1
-            velocity.x -= frictionForce * (1 / fps);
-
+            const deltaTime = (vars.fps > 0 ? 1 / vars.fps : 0.016);
             
-            // Обновляем позицию шарика
-            obj.position.add(velocity.clone().multiplyScalar((1 / fps)));
-
-            if (Math.abs(velocity.x) < 0.1) {
+            // 1. Расчет нормальной силы (N = m * g)
+            const normalForce = vars.mass * Math.abs(vars.gravity);
+            
+            // 2. Расчет силы трения (F_friction = μ * N)
+            const frictionForce = vars.friction * normalForce;
+            
+            // 3. Расчет ускорения от трения (a = F / m)
+            const frictionAcceleration = frictionForce / vars.mass;
+            
+            // 4. Применяем торможение
+            if (velocity.x > 0) {
+                velocity.x -= frictionAcceleration * deltaTime;
+                if (velocity.x < 0) velocity.x = 0;
+            }
+            
+            // 5. Обновляем позицию
+            obj.position.x += velocity.x * deltaTime;
+            
+            // 6. Проверяем остановку
+            if (Math.abs(velocity.x) < 0.01) {
                 velocity.x = 0;
                 isMoving = false;
             }
 
+            vars.time += deltaTime;
             updatePhysicsInfo();
         }
 
@@ -216,6 +252,7 @@
         document.getElementById('stateValue').textContent = statValues.state;
         document.getElementById('distance').textContent = obj.position.x.toFixed(2);
         document.getElementById('gravityValue').textContent = vars.gravity.toFixed(2);
+        document.getElementById('timeValue').textContent = vars.time.toFixed(2);
     }
 
     bindEvents();
