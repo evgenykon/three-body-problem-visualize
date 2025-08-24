@@ -16,20 +16,19 @@ app.use('/assets', express.static('assets'))
 app.use("/libs/three", express.static('node_modules/three/build'));
 
 app.get('/', function(req:any, res:any){
-  res.render('index.html');
+  res.render('layout.html', {
+    simInclude: `index.html`,
+  });
 });
 app.get('/sim/:id', function(req:any, res:any){
   const allowedSims: string[] = [
-    "01-acceleration",
-    "02-velocity",
-    "03-position",
-    "04-gravity",
-    "05-orbit"
+    "01-mech-acceleration",
+    "02-mech-gravity-acceleration"
   ];
   if (!allowedSims.includes(req.params.id)) {
     return res.status(404).send("Not Found");
   }
-  res.render('sim.html', {
+  res.render('layout.html', {
     simInclude: `sim/${req.params.id}.html`,
   });
 });

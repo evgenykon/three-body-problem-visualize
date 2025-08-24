@@ -1,0 +1,227 @@
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
+<script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script>
+<script src="/assets/sceneFunctions.js"></script>
+
+<h1>01 - Механика - Сила, Ускорение</h1> 
+
+<article class="grid"> 
+
+    <%- include('../components/simContainer1.html'); %>  
+
+    <div class="inputs s3">
+        <fieldset>
+            <button onclick="runSimulation()">Start Simulation</button>
+        </fieldset>
+        <fieldset>
+            <div class="row">
+                <div class="max">
+                    <div class="field border label max">
+                        <input type="number" id="startForce" min="0" max="10" value="1" step="0.1">
+                        <label>Start force (N)</label>
+                    </div>
+                </div>
+            </div>
+            <div class="row">
+                <div class="max">
+                    <div class="field border label max">
+                        <input type="number" id="mass" min="0" max="10" value="1" step="0.1">
+                        <label>Mass (kg)</label>
+                    </div>
+                </div>
+            </div>
+            <div class="row">
+                <div class="max">   
+                    <div class="field border label">
+                        <select id="frictionCoef">
+                            <option value="0.05" selected>Rubber on Ice (0.05)</option>
+                            <option value="0.5">Rubber on Glass (0.1)</option>
+                            <option value="0.5">Rubber on Sand (0.3)</option>
+                            <option value="0.7">Rubber on Wood (0.5)</option>
+                            <option value="0.9">Rubber on Asfalt (0.9)</option>
+                        </select>
+                        <label>Friction Coefficient</label>
+                    </div>
+                </div>
+            </div>
+        </fieldset>
+    </div>
+</article>
+
+<article class="description-text page active">
+    <h5>Некоторые важные определения</h5>
+    <p><strong>Сила (Force)</strong> - это воздействие, которое может изменить состояние покоя или движения объекта.
+        Сила измеряется в ньютонах (N) и может быть представлена как вектор, имеющий направление и величину.
+        В данном симуляторе сила применяется в горизонтальном направлении, заставляя объект двигаться по плоскости.</p>
+    <p><strong>Ускорение (Acceleration)</strong> - это изменение скорости объекта с течением времени.
+        Оно измеряется в метрах на секунду в квадрате (m/s²) и указывает, насколько быстро объект изменяет свою скорость.
+        В этом симуляторе ускорение возникает в результате действия силы на объект с определенной массой.</p>
+    <p><strong>Масса (Mass)</strong> - это мера количества вещества в объекте.
+        Масса измеряется в килограммах (kg) и определяет, насколько объект устойчив к изменениям своего движения.
+        Чем больше масса объекта, тем больше силы требуется для его ускорения.</p>
+    <p><strong>Сила трения (Friction Force)</strong> - это сила, которая противодействует движению объекта по поверхности.
+        Она возникает из-за взаимодействия между поверхностью объекта и поверхностью, по которой он движется.
+        Сила трения зависит от коэффициента трения (μ) и нормальной силы (N), которая в данном случае равна массе объекта,
+         умноженной на ускорение свободного падения (g).</p>
+
+</article>
+
+<script>
+    const vars = {
+        gravity: 9.8,
+        startHeight: 0.5,
+        force: 1,
+        friction: 0.05,
+        mass: 1,
+        fps: 60
+    };
+    const viewSize = 800;
+    const gridConfig = {
+        size: 200,
+        divisions: 200,
+        colorCenterLine: 0x000000,
+        colorGrid: 0x444444
+    };
+    const statValues = {
+        velocity: 0,
+        height: 0.5,
+        state: 'Falling',
+        maxSpeed: 0
+    };
+    const objSize = 0.5; // Размер объекта
+
+    // Инициализация сцены, камеры и рендерера
+    const scene = new THREE.Scene();
+    const camera = createCamera();
+    const renderer = createRenderer();
+    document.querySelector('#sim-container').appendChild(renderer.domElement);
+
+    // Добавление освещения
+    const lights = createLights();
+    scene.add(lights.ambientLight);
+    scene.add(lights.directionalLight);
+
+    // Создание плоской поверхности (пола)      
+    const floor = createFloor(100);
+    scene.add(floor);
+    
+    // Добавление координатной сетки
+    let gridHelper;
+    createGrid();
+
+    // Добавление осей координат (X, Y, Z)
+    // const axesHelper = new THREE.AxesHelper(100);
+    // axesHelper.position.y = 0.1;
+    // scene.add(axesHelper);
+
+
+    // Создание кубика
+    const objGeometry = new THREE.BoxGeometry(1, 1, 1);
+    const soccerTexture = new THREE.TextureLoader().load('/assets/ball-texture.png');
+    const objMaterial = new THREE.MeshStandardMaterial({
+        map: soccerTexture,
+        roughness: 0.8,
+        metalness: 0.1,
+        normalScale: new THREE.Vector2(1, 1)
+    });
+    const obj = new THREE.Mesh(objGeometry, objMaterial);
+    obj.castShadow = true; // Включаем тени
+    scene.add(obj);
+
+    
+    // Физические параметры
+    let velocity = new THREE.Vector3(0, 0, 0); // Начальная скорость
+    
+    const damping = 0; // Коэффициент упругости (отскок)
+    let isMoving = false;
+
+    // стрелка
+    const arrowDirection = new THREE.Vector3(1, 0, 0); // Начальное направление
+    const arrowOrigin = new THREE.Vector3(-2.5, 0.5, 0,5);    // Начальная позиция
+    const arrowLength = 2;                             // Длина стрелки
+    const arrowColor = 0x0000ff;                       // Синий цвет
+    const arrow = new THREE.ArrowHelper(
+        arrowDirection,
+        arrowOrigin,
+        arrowLength,
+        arrowColor,
+        0.5,    // Длина наконечника
+        0.2     // Ширина наконечника
+    );
+    scene.add(arrow);
+
+    function setup() {
+        // Положение и направление камеры
+        const startHeight = vars.startHeight > 100 ? 100 : vars.startHeight;
+        camera.position.set(-5, 3, 0);
+        camera.lookAt(5, 0, 0);
+        // Начальная позиция выше пола
+        obj.position.set(0, vars.startHeight, 0); 
+    }
+
+    // Добавим возможность сброса анимации по клику
+    function runSimulation() {
+        setSimulationParameters();
+        obj.position.set(0, vars.startHeight, 0);
+        velocity.set(vars.force, 0, 0);
+        statValues.maxSpeed = 0;
+        document.getElementById('maxSpeed').textContent = statValues.maxSpeed;
+        isMoving = true;
+        
+    }
+
+    // Функция анимации
+    function animate() {
+        requestAnimationFrame(animate);
+
+        if (isMoving) {
+            const fps = (vars.fps > 0 ? vars.fps : 0.016);
+            // Применяем силу трения
+            const frictionForce = vars.friction * vars.mass * vars.gravity; // F_friction = μ * N, где N = m * g, при m=1
+            velocity.x -= frictionForce * (1 / fps);
+
+            
+            // Обновляем позицию шарика
+            obj.position.add(velocity.clone().multiplyScalar((1 / fps)));
+
+            if (Math.abs(velocity.x) < 0.1) {
+                velocity.x = 0;
+                isMoving = false;
+            }
+
+            updatePhysicsInfo();
+        }
+
+        renderer.render(scene, camera);
+    }
+
+    function setSimulationParameters() {
+        vars.force = parseFloat(document.getElementById('startForce').value);
+        vars.friction = parseFloat(document.getElementById('frictionCoef').value);
+        vars.mass = parseFloat(document.getElementById('mass').value);
+        setup();
+    }
+
+    function updatePhysicsInfo() {
+        statValues.velocity = velocity.length().toFixed(2);
+        statValues.height = (obj.position.y - floor.position.y).toFixed(2);
+        statValues.state = isMoving ? 'Moving' : 'At Rest';
+        if (velocity.length() > statValues.maxSpeed) {
+            statValues.maxSpeed = velocity.length().toFixed(2);
+            document.getElementById('maxSpeed').textContent = statValues.maxSpeed;
+        }
+
+        document.getElementById('velocityValue').textContent = statValues.velocity;
+        document.getElementById('heightValue').textContent = statValues.height;
+        document.getElementById('stateValue').textContent = statValues.state;
+        document.getElementById('distance').textContent = obj.position.x.toFixed(2);
+        document.getElementById('gravityValue').textContent = vars.gravity.toFixed(2);
+    }
+
+    bindEvents();
+    setup();
+    animate();
+
+
+</script>
+

@@ -1,0 +1,253 @@
+<script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
+<script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script>
+
+<h1>02 - Mechanics - Gravity Acceleration</h1>
+
+<article class="grid"> 
+
+    <%- include('../components/simContainer1.html'); %>  
+
+    <div class="inputs s3">
+        <fieldset>
+            <button onclick="runSimulation()">Start Simulation</button>
+        </fieldset>
+        <fieldset>
+            <div class="row">
+                <div class="max">   
+                    <div class="field border label">
+                        <select id="gravityConst">
+                            <option value="9.8" selected>Earth (9.8 m/s²)</option>
+                            <option value="3.7">Mars (3.7 m/s²)</option>
+                            <option value="1.6">Moon (1.6 m/s²)</option>
+                            <option value="24.8">Jupiter (24.8 m/s²)</option>
+                            <option value="8.87">Venus (8.87 m/s²)</option>
+                            <option value="11.15">Saturn (11.15 m/s²)</option>
+                            <option value="9.0">Uranus (9.0 m/s²)</option>
+                            <option value="10.44">Neptune (10.44 m/s²)</option>
+                            <option value="0.62">Pluto (0.62 m/s²)</option>
+                            <option value="274">Sun (274 m/s²)</option>
+                        </select>
+                        <label>Gravity acceleration</label>
+                    </div>
+                </div>
+            </div>
+            <div class="row">
+                <div class="max">
+                    <div class="field border label max">
+                        <input type="number" id="startHeight" min="0" max="10" value="5" step="0.1">
+                        <label>Start height (m)</label>
+                    </div>
+                </div>
+            </div>
+        </fieldset>
+    </div>
+</article>
+
+
+<script>
+    const vars = {
+        gravity: 9.8,
+        startHeight: 5,
+        fps: 60
+    };
+    const viewSize = 800;
+    const gridConfig = {
+        size: 20,
+        divisions: 20,
+        colorCenterLine: 0x888888,
+        colorGrid: 0x444444
+    };
+    const statValues = {
+        velocity: 0,
+        height: 0,
+        state: 'Falling',
+        maxSpeed: 0
+    };
+    const ballRadius = 0.25; // Радиус шарика
+    const ballSize = ballRadius * 2; // Диаметр шарика
+
+    // Инициализация сцены, камеры и рендерера
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(65, 1, 1, 300);
+    const renderer = new THREE.WebGLRenderer({
+        antialias: true,
+        alpha: false,
+        powerPreference: "high-performance"
+    });
+    if (window.innerWidth < viewSize) {
+        renderer.setSize(window.innerWidth, window.innerWidth);
+    } else {
+        renderer.setSize(viewSize, viewSize);
+    }
+    renderer.setClearColor(0xcccccc);
+    document.body.appendChild(renderer.domElement);
+    // Добавление освещения
+    const ambientLight = new THREE.AmbientLight(0x404040, 0.8);
+    scene.add(ambientLight);
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.9);
+    directionalLight.position.set(5, 100, 7);
+    scene.add(directionalLight);
+    // Создание плоской поверхности (пола)      
+    const floorGeometry = new THREE.PlaneGeometry(20, 20);
+    const floorMaterial = new THREE.MeshStandardMaterial({ 
+        color: 0x888888,
+        roughness: 0.8,
+        metalness: 0.2
+    });
+    const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+    floor.rotation.x = -Math.PI / 2; // Поворачиваем плоскость горизонтально
+    floor.position.y = 0;
+    floor.receiveShadow = true; // Включаем тени для пола
+    scene.add(floor);
+    // Создание шарика
+    const ballGeometry = new THREE.SphereGeometry(ballRadius, 32, 32);
+    // const ballMaterial = new THREE.MeshStandardMaterial({
+    //     color: 0x0074d9,
+    //     roughness: 0.5,
+    //     metalness: 0
+    // });
+    const soccerTexture = new THREE.TextureLoader().load('/assets/ball-texture.png');
+
+    const ballMaterial = new THREE.MeshStandardMaterial({
+        map: soccerTexture,
+        roughness: 0.8,
+        metalness: 0.1,
+        normalScale: new THREE.Vector2(1, 1)
+    });
+
+
+    const ball = new THREE.Mesh(ballGeometry, ballMaterial);
+    ball.castShadow = true; // Включаем тени для шарика
+    scene.add(ball);
+
+    // Добавление координатной сетки
+    let gridHelper;
+    function createGrid() {
+        if (gridHelper) {
+            scene.remove(gridHelper);
+        }
+        gridHelper = new THREE.GridHelper(gridConfig.size, gridConfig.divisions, gridConfig.colorCenterLine, gridConfig.colorGrid);
+        gridHelper.position.y = floor.position.y + 0.01; // Немного выше пола
+        scene.add(gridHelper);
+    }
+    createGrid();
+
+    // Добавление осей координат (X, Y, Z)
+    const axesHelper = new THREE.AxesHelper(100);
+    axesHelper.position.y = 0.1;
+    scene.add(axesHelper);
+    
+    // Физические параметры
+    let velocity = new THREE.Vector3(0, 0, 0); // Начальная скорость
+    let gravity = 0; // Гравитация (отрицательное значение по оси Y)
+    
+    const damping = 0; // Коэффициент упругости (отскок)
+    let isDropping = false;
+
+    function setup() {
+        // Положение и направление камеры
+        const startHeight = vars.startHeight > 100 ? 100 : vars.startHeight;
+        camera.position.set(0, startHeight / 2, startHeight * 1.5);
+        camera.lookAt(0, vars.startHeight / 5, 0);
+        // Начальная позиция выше пола
+        ball.position.set(0, vars.startHeight + ballRadius, 0); 
+
+        gravity = -vars.gravity
+    }
+
+    // Функция анимации
+    function animate() {
+        requestAnimationFrame(animate);
+
+        if (isDropping) {
+            // Применяем гравитацию
+            const fps = (vars.fps > 0 ? vars.fps : 0.016);
+            velocity.y += gravity * (1 / fps); // 0.016 ≈ 1/60 (60 FPS)
+            
+            // Обновляем позицию шарика
+            ball.position.add(velocity.clone().multiplyScalar((1 / fps)));
+
+            // Проверка столкновения с полом
+            if ((ball.position.y - ballRadius) <= floor.position.y) {
+                ball.position.y = floor.position.y + ballRadius; // Корректируем позицию
+                velocity.y = -velocity.y * damping; // Отскок
+                              
+                // Если скорость после отскока маленькая - останавливаем анимацию
+                if (Math.abs(velocity.y) < 0.1) {
+                    velocity.y = 0;
+                    isDropping = false;
+                }
+            }
+
+            updatePhysicsInfo();
+        }
+
+        // Вращение шарика для эффекта движения
+        // if (isDropping) {
+        //     ball.rotation.x += velocity.y * 0.01;
+        //     ball.rotation.z += velocity.y * 0.005;
+        // }
+
+        renderer.render(scene, camera);
+    }
+
+    // Обработка изменения размера окна
+    window.addEventListener('resize', () => {
+        if (window.innerWidth < viewSize) {
+            renderer.setSize(window.innerWidth, window.innerWidth);
+        } else {
+            renderer.setSize(viewSize, viewSize);
+        }
+        //camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+    });
+
+    setup();
+
+    // Запуск анимации
+    animate();
+
+    // Добавим возможность сброса анимации по клику
+    function runSimulation() {
+        setSimulationParameters();
+        ball.position.set(0, vars.startHeight + ballRadius, 0);
+        velocity.set(0, 0, 0);
+        ball.rotation.set(0, 0, 0);
+        statValues.maxSpeed = 0;
+        document.getElementById('maxSpeed').textContent = statValues.maxSpeed;
+        isDropping = true;
+        
+    }
+
+    document.querySelector('#sim-container').appendChild(renderer.domElement);
+
+    function setSimulationParameters() {
+        vars.gravity = parseFloat(document.getElementById('gravityConst').value);
+        vars.startHeight = parseFloat(document.getElementById('startHeight').value);
+        setup();
+    }
+
+
+    function updatePhysicsInfo() {
+        statValues.velocity = velocity.length().toFixed(2);
+        statValues.height = (ball.position.y - floor.position.y - ballRadius).toFixed(2);
+        statValues.state = isDropping ? 'Falling' : 'At Rest';
+        if (velocity.length() > statValues.maxSpeed) {
+            statValues.maxSpeed = velocity.length().toFixed(2);
+            document.getElementById('maxSpeed').textContent = statValues.maxSpeed;
+        }
+
+        document.getElementById('velocityValue').textContent = statValues.velocity;
+        document.getElementById('heightValue').textContent = statValues.height;
+        document.getElementById('stateValue').textContent = statValues.state;
+    }
+
+</script>
+
+<article class="page active">
+    <h5>Default</h5>
+
+    Acceleration is a key quantity in kinematics that shows how quickly a body's velocity changes.
+
+
+</article>
