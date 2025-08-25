@@ -30,6 +30,14 @@
                 </div>
             </div>
             <div class="row">
+                <div class="max">
+                    <div class="field border label max">
+                        <input type="number" id="startHeight" min="0" max="10" value="2" step="0.1">
+                        <label>Start height (m)</label>
+                    </div>
+                </div>
+            </div>
+            <div class="row">
                 <div class="max">   
                     <div class="field border label">
                         <select id="frictionCoef">
@@ -40,6 +48,25 @@
                             <option value="0.9">Rubber on Asfalt (0.9)</option>
                         </select>
                         <label>Friction Coefficient</label>
+                    </div>
+                </div>
+            </div>
+            <div class="row">
+                <div class="max">   
+                    <div class="field border label">
+                        <select id="gravityConst">
+                            <option value="9.8" selected>Earth (9.8 m/s²)</option>
+                            <option value="3.7">Mars (3.7 m/s²)</option>
+                            <option value="1.6">Moon (1.6 m/s²)</option>
+                            <option value="24.8">Jupiter (24.8 m/s²)</option>
+                            <option value="8.87">Venus (8.87 m/s²)</option>
+                            <option value="11.15">Saturn (11.15 m/s²)</option>
+                            <option value="9.0">Uranus (9.0 m/s²)</option>
+                            <option value="10.44">Neptune (10.44 m/s²)</option>
+                            <option value="0.62">Pluto (0.62 m/s²)</option>
+                            <option value="274">Sun (274 m/s²)</option>
+                        </select>
+                        <label>Gravity acceleration</label>
                     </div>
                 </div>
             </div>
@@ -75,6 +102,15 @@
             <li>\(a\) - ускорение (в метрах на секунду в квадрате, m/s²)</li>
         </ul>
     </p>
+    <p>Сила тяжести рассчитывается по формуле:</p>
+    <p>\[F_{g} = m \cdot g\]</p>
+    <p>где:
+        <ul>
+            <li>\(F_{g}\) - сила тяжести (в ньютонах, N)</li>
+            <li>\(m\) - масса (в килограммах, kg)</li>
+            <li>\(g\) - ускорение свободного падения (в метрах на секунду в квадрате, m/s²)</li>
+        </ul>
+    </p>
     <p>Сила трения рассчитывается по формуле:</p>
     <p>\[F_{fr} = \mu \cdot N\]</p>
     <p>где:
@@ -90,7 +126,7 @@
 <script>
     const vars = {
         gravity: 9.8,
-        startHeight: 0.5,
+        startHeight: 2,
         force: 1,
         friction: 0.05,
         mass: 1,
@@ -106,7 +142,7 @@
     };
     const statValues = {
         velocity: 0,
-        height: 0.5,
+        height: 2,
         state: 'Falling',
         maxSpeed: 0
     };
@@ -153,9 +189,12 @@
     
     // Физические параметры
     let velocity = new THREE.Vector3(0, 0, 0); // Начальная скорость
+    let gravity = 0; // Гравитация (отрицательное значение по оси Y)
+    
     
     const damping = 0; // Коэффициент упругости (отскок)
     let isMoving = false;
+    let isDropping = false;
 
     // стрелка
     const arrowDirection = new THREE.Vector3(1, 0, 0); // Начальное направление
@@ -179,17 +218,24 @@
         camera.lookAt(5, 0, 0);
         // Начальная позиция выше пола
         obj.position.set(0, vars.startHeight, 0); 
+        gravity = -vars.gravity;
     }
 
     // Добавим возможность сброса анимации по клику
     function runSimulation() {
         setSimulationParameters();
+        if (vars.startHeight < objSize) {
+            alert('Start height must be greater than object size (' + objSize + ' m)');
+            return;
+        }
         obj.position.set(0, vars.startHeight, 0);
         const mass = 1; // (vars.mass > 0 ? vars.mass : 0.01);
         velocity.set(vars.force / mass, 0, 0);
         statValues.maxSpeed = 0;
         document.getElementById('maxSpeed').textContent = statValues.maxSpeed;
         isMoving = true;
+        isDropping = vars.startHeight > objSize ? true : false;
+        console.log('Run simulation with', {isMoving, isDropping, velocity: velocity.x, height: obj.position.y});
         vars.time = 0;
     }
 
@@ -197,25 +243,26 @@
     function animate() {
         requestAnimationFrame(animate);
 
+        const deltaTime = (vars.fps > 0 ? 1 / vars.fps : 0.016);
+
         if (isMoving) {
-            const deltaTime = (vars.fps > 0 ? 1 / vars.fps : 0.016);
             
-            // 1. Расчет нормальной силы (N = m * g)
+            // Расчет нормальной силы (N = m * g)
             const normalForce = vars.mass * Math.abs(vars.gravity);
             
-            // 2. Расчет силы трения (F_friction = μ * N)
+            // Расчет силы трения (F_friction = μ * N)
             const frictionForce = vars.friction * normalForce;
             
-            // 3. Расчет ускорения от трения (a = F / m)
-            const frictionAcceleration = frictionForce / vars.mass;
+            // Расчет ускорения от трения (a = F / m)
+            const frictionAcceleration = (obj.position.y <= vars.startHeight) ? (frictionForce / vars.mass) : 0;
             
-            // 4. Применяем торможение
-            if (velocity.x > 0) {
+            // Применяем торможение
+            if (velocity.x > 0 && obj.position.y <= objSize) {
                 velocity.x -= frictionAcceleration * deltaTime;
                 if (velocity.x < 0) velocity.x = 0;
             }
-            
-            // 5. Обновляем позицию
+
+            // Обновляем позицию
             obj.position.x += velocity.x * deltaTime;
             
             // 6. Проверяем остановку
@@ -223,7 +270,24 @@
                 velocity.x = 0;
                 isMoving = false;
             }
+        }
 
+        if (isDropping) {
+            // Применяем гравитацию
+            if (obj.position.y > objSize) {
+                velocity.y += -vars.gravity * deltaTime; // 0.016 ≈ 1/60 (60 FPS)
+                obj.position.y += velocity.y * deltaTime;
+                if (obj.position.y <= objSize) {
+                    obj.position.y = objSize; // Корректируем позицию
+                }
+            } else {
+                velocity.y = 0;
+                obj.position.y = objSize; // Корректируем позицию
+                isDropping = false;
+            }
+        }
+
+        if (isMoving || isDropping) {
             vars.time += deltaTime;
             updatePhysicsInfo();
         }
@@ -235,6 +299,8 @@
         vars.force = parseFloat(document.getElementById('startForce').value);
         vars.friction = parseFloat(document.getElementById('frictionCoef').value);
         vars.mass = parseFloat(document.getElementById('mass').value);
+        vars.gravity = parseFloat(document.getElementById('gravityConst').value);
+        vars.startHeight = parseFloat(document.getElementById('startHeight').value);
         setup();
     }
 
