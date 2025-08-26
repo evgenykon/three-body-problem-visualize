@@ -1,7 +1,7 @@
 # Three Body Problem Simulator
 
-![part 1](/assets/01.png)
-![part 2](/assets/02.png)
+![part 1](/app/assets/01.png)
+![part 2](/app/assets/02.png)
 
 ## Start using Docker Compose
 
