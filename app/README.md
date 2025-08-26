@@ -1,15 +1,13 @@
-# /app
+# Three Body Problem Simulator
 
-To install dependencies:
+![part 1](/assets/01.png)
+![part 2](/assets/02.png)
 
-```bash
-bun install
-```
-
-To run:
+## Start using Docker Compose
 
 ```bash
-bun run index.ts
+docker compose build
+docker compose up -d
 ```
 
-This project was created using `bun init` in bun v1.2.20. [Bun](https://bun.com) is a fast all-in-one JavaScript runtime.
+Then open http://localhost:3000

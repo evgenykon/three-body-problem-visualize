@@ -46,7 +46,11 @@ function createGrid() {
         scene.remove(gridHelper);
     }
     gridHelper = new THREE.GridHelper(gridConfig.size, gridConfig.divisions, gridConfig.colorCenterLine, gridConfig.colorGrid);
-    gridHelper.position.y = floor.position.y + 0.01; // Немного выше пола
+    if (typeof floor !== 'undefined') {
+        gridHelper.position.y = floor.position.y + 0.01; // Немного выше пола
+    } else {
+        gridHelper.position.y = 0; // Если пола нет, просто немного выше нуля
+    }
     scene.add(gridHelper);
 }
 
