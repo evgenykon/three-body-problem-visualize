@@ -65,3 +65,11 @@ function bindEvents() {
         camera.updateProjectionMatrix();
     });
 }
+
+function cameraZoom(value) {
+    if (camera.zoom + value <= 0) {
+        return
+    }
+    camera.zoom += value;
+    camera.updateProjectionMatrix(); 
+}

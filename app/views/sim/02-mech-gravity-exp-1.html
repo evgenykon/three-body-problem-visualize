@@ -1,0 +1,330 @@
+
+
+<script src="/assets/sceneFunctions.js"></script>
+
+<h1>Orbit Launch</h1> 
+
+<%- include('../components/gravity-tabs.html', {active: '01'}); %> 
+
+<article class="grid"> 
+
+    <div id="sim-wrapper" class="s9">
+        <div id="physicsInfo">
+            <div>Time: <span id="timeValue">0.00</span></div>
+        </div>
+        <%- include('../components/preloader.html'); %> 
+        <div id="sim-container"></div>
+    </div>
+
+    <div class="inputs s3">
+        <fieldset>
+            <legend>Camera</legend>
+            <nav class="center-align tiny-space">
+            <nav class="toolbar">
+                <a onclick="camera.rotation.x = camera.rotation.x + Math.PI/32"> <i>rotate_left</i> </a>
+                <a onclick="camera.rotation.x = camera.rotation.x - Math.PI/32"> <i>rotate_right</i> </a>
+                <a onclick="camera.rotation.y = camera.rotation.y + Math.PI/32"> <i>keyboard_arrow_left</i> </a>
+                <a onclick="camera.rotation.y = camera.rotation.y - Math.PI/32"> <i>keyboard_arrow_right</i> </a>
+            </nav>
+            </nav>
+            <nav class="center-align tiny-space">
+            <nav class="toolbar">
+                <a onclick="cameraZoom(+1)"> <i>zoom_in</i> </a>
+                <a onclick="cameraZoom(-1)"> <i>zoom_out</i> </a>
+            </nav>
+            </nav>
+        </fieldset>
+        <fieldset>
+            <button onclick="runSimulation()">Start Simulation</button>
+        </fieldset>
+        <fieldset>
+            <!-- <div class="row">
+                <div class="max">
+                    <div class="field border label max">
+                        <input type="number" id="mass1" min="0" max="1000000" value="200" step="0.1">
+                        <label>Mass 1</label>
+                    </div>
+                </div>
+            </div>
+             -->
+        </fieldset>
+    </div>
+</article>
+
+<script>
+    const vars = {
+        fps: 60,
+        time: 0,
+        isMoving: false,
+    };
+    const viewSize = 800;
+    const gridConfig = {
+        size: 500,
+        divisions: 50,
+        colorCenterLine: 0x000000,
+        colorGrid: 0x444444
+    };
+    const statValues = {
+    };
+
+    function toogleLoadingPreview(isViewable) {
+        if (isViewable) {
+            document.querySelector('#preloader').style.display = '';
+        } else {
+            document.querySelector('#preloader').style.display = 'none';
+        }
+    }
+
+    // Инициализация сцены, камеры и рендерера
+    const scene = new THREE.Scene();
+    const camera = createCamera();
+    const renderer = createRenderer();
+    renderer.setClearColor( 0xffffff, 0);
+    document.querySelector('#sim-container').appendChild(renderer.domElement);
+
+    toogleLoadingPreview(true);
+
+    // Добавление освещения
+    const lights = createLights();
+    scene.add(lights.ambientLight);
+    
+    lights.directionalLight.position.set(500, 500, 0);
+    scene.add(lights.directionalLight);
+    
+    // Добавление координатной сетки
+    let gridHelper;
+    createGrid();
+    gridHelper.position.x = 0
+    gridHelper.position.y = 0
+
+    // добавление Земли
+    const earthGeometry1 = new THREE.SphereGeometry(200, 128, 128);
+    const earthTexture1 = new THREE.TextureLoader().load('/assets/earth_no_clouds.jpg', function() {
+        toogleLoadingPreview(false);
+    });
+    const earthMaterial1 = new THREE.MeshStandardMaterial({
+        map: earthTexture1,
+        roughness: 0.8,
+        metalness: 0.1,
+        normalScale: new THREE.Vector2(1, 1)
+    });
+    const earth = new THREE.Mesh(earthGeometry1, earthMaterial1);
+
+    earth.castShadow = true; // Включаем тени
+    //scene.add(earth);
+
+    const glowMaterial = new THREE.MeshBasicMaterial({
+        color: 0x6699ff,       // Цвет свечения
+        transparent: true,     // Включаем прозрачность
+        opacity: 0.9,          // Уровень прозрачности (0-1)
+        blending: THREE.AdditiveBlending, // Режим смешивания для свечения
+        side: THREE.BackSide   // Рендерим с обратной стороны
+    });
+    // Создаем объект (немного больше основного)
+    const glowGeometry = new THREE.SphereGeometry(205, 128, 128); 
+    const glowObject = new THREE.Mesh(glowGeometry, glowMaterial);
+    //scene.add(glowObject);
+
+    const earthGroup = new THREE.Group();
+    earthGroup.add(earth);
+    earthGroup.add(glowObject);
+    earthGroup.add(camera);
+    scene.add(earthGroup);
+        
+    earthGroup.position.x = 0;
+    earthGroup.position.y = 0;
+    earthGroup.position.z = 0;
+    earthGroup.rotation.y = -1.9;
+
+    //
+    camera.position.set(300, 0, 100);
+    camera.lookAt(180, 0, 110);
+    camera.zoom = 1;
+    //earthGroup.add(camera);
+    //camera.rotation.x = Math.PI/2
+
+    //earth.radius = 10;
+
+    // let velocity1 = new THREE.Vector3(0, 0, 0);
+
+    // добавление планеты 2
+    // const objGeometry2 = new THREE.SphereGeometry(vars.r2, 32, 32);
+    // const objTexture2 = new THREE.TextureLoader().load('/assets/mercury.jpg');
+    // const objMaterial2 = new THREE.MeshLambertMaterial({
+    //     map: objTexture2,
+    //     color: 0xff3456,
+    //     fog: true,
+    //     reflectivity: 1,
+    //     refractionRatio: 0.1,
+    // });
+    // const obj2 = new THREE.Mesh(objGeometry2, objMaterial2);
+    // obj2.castShadow = true; // Включаем тени
+    // scene.add(obj2);
+    // let velocity2 = new THREE.Vector3(0, 0, 0);
+    // let maxDistance = 0;
+
+    // Используем улучшенные трейлы
+    // const advancedTrails = {
+    //     obj1: createAdvancedTrail(0x00ccff, 1000), // Красный, 1000 точек
+    //     obj2: createAdvancedTrail(0xff3456, 1000)  // Синий, 1000 точек
+    // };
+
+    // scene.add(advancedTrails.obj1.line);
+    // scene.add(advancedTrails.obj2.line);
+
+
+    function setup() {
+        // vars.mass1 = parseFloat(document.getElementById('mass1').value);
+        // vars.mass2 = parseFloat(document.getElementById('mass2').value);
+        // vars.distance = parseFloat(document.getElementById('distance').value);
+        // vars.velocity1 = parseFloat(document.getElementById('velocity1').value);
+        // vars.velocity2 = -parseFloat(document.getElementById('velocity2').value);
+        // vars.r1 = Math.cbrt(vars.mass1) * 0.2; // Радиус пропорционален кубическому корню массы
+        // vars.r2 = Math.cbrt(vars.mass2) * 0.2;
+
+        // obj1.position.z = -vars.distance / 2;
+        //obj1.geometry = new THREE.SphereGeometry(vars.r1, 32, 32);
+        // obj2.position.x = 0;
+        // obj2.position.z = vars.distance / 2;
+        // obj2.radius = vars.r2;
+        // obj2.geometry = new THREE.SphereGeometry(vars.r2, 32, 32);
+        // clearTrails();
+        // statValues.minDistance = 0;
+        // statValues.maxDistance = 0;
+    }
+
+    // Добавим возможность сброса анимации по клику
+    function runSimulation() {
+        setup();
+        // vars.time = 0;
+        // vars.isMoving = true;
+        // velocity1.set(vars.velocity1, 0, 0);
+        // velocity2.set(vars.velocity2, 0, 0);
+        // obj1.position.set(0, 0, -(vars.distance / 2));
+        // obj2.position.set(0, 0, (vars.distance / 2));
+    }
+
+    // Улучшенная функция создания трейла
+    function createAdvancedTrail(color, maxPoints = 500) {
+        // const geometry = new THREE.BufferGeometry();
+        // const material = new THREE.LineBasicMaterial({
+        //     color: color,
+        //     linewidth: 1,
+        //     transparent: true,
+        //     opacity: 0.3,
+        //     depthTest: false
+        // });
+        
+        // const positions = new Float32Array(maxPoints * 3);
+        // geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        
+        // return {
+        //     line: new THREE.Line(geometry, material),
+        //     points: [],
+        //     maxPoints: maxPoints,
+        //     addPoint: function(position) {
+        //         this.points.push(position.clone());
+        //         if (this.points.length > this.maxPoints) {
+        //             this.points.shift();
+        //         }
+        //         this.updateGeometry();
+        //     },
+        //     updateGeometry: function() {
+        //         const positions = this.line.geometry.attributes.position.array;
+        //         for (let i = 0; i < this.points.length; i++) {
+        //             positions[i * 3] = this.points[i].x;
+        //             positions[i * 3 + 1] = this.points[i].y;
+        //             positions[i * 3 + 2] = this.points[i].z;
+        //         }
+        //         this.line.geometry.attributes.position.needsUpdate = true;
+        //         this.line.geometry.setDrawRange(0, this.points.length);
+        //     },
+        //     clear: function() {
+        //         this.points = [];
+        //         this.updateGeometry();
+        //     }
+        // };
+    }
+
+    // Функция анимации
+    function animate() {
+        requestAnimationFrame(animate);
+
+        const deltaTime = (vars.fps > 0 ? 1 / vars.fps : 0.016);
+
+        
+        earthGroup.rotation.y = earthGroup.rotation.y + Math.PI / Math.pow(2,10)
+
+        if (vars.isMoving) {
+            vars.time += deltaTime;
+            // const G = 1; // Гравитационная постоянная (упрощенная для симуляции)
+            // const r = obj2.position.clone().sub(obj1.position);
+            // vars.distance = r.length();
+            // const distance = vars.distance;
+            // maxDistance = Math.max(maxDistance, distance);
+
+            // if (distance > obj1.geometry.parameters.radius + obj2.geometry.parameters.radius) { // Предотвращаем слишком близкое сближение
+            //     const forceMagnitude = (G * vars.mass1 * vars.mass2) / (distance * distance);
+            //     const force = r.normalize().multiplyScalar(forceMagnitude);
+
+            //     // Обновление позиций на основе силы
+            //     const acceleration1 = force.clone().divideScalar(vars.mass1);
+            //     const acceleration2 = force.clone().negate().divideScalar(vars.mass2);
+
+            //     velocity1.add(acceleration1.multiplyScalar(deltaTime));
+            //     velocity2.add(acceleration2.multiplyScalar(deltaTime));
+
+            //     obj1.position.add(velocity1.clone().multiplyScalar(deltaTime));
+            //     obj2.position.add(velocity2.clone().multiplyScalar(deltaTime));
+
+            //     // Обновляем трейлы (реже для оптимизации)
+            //     if (Math.floor(vars.time * 10) % 2 === 0) {
+            //         advancedTrails.obj1.addPoint(obj1.position.clone());
+            //         advancedTrails.obj2.addPoint(obj2.position.clone());
+            //     }
+
+            //     camera.position.set(-10, maxDistance + 10, 0);
+            //     camera.lookAt((obj1.position.x + obj2.position.x) / 2, 0, (obj1.position.z + obj2.position.z) / 2);
+
+            // } else {
+            //     vars.isMoving = false; // Остановить движение при слишком близком сближении
+            //     console.log('Objects have collided or are too close. Simulation stopped.');
+            // }
+            updateTelemetry();
+        }
+
+        renderer.render(scene, camera);
+    }
+
+    function clearTrails() {
+        // advancedTrails.obj1.clear();
+        // advancedTrails.obj2.clear();
+    }
+
+    function clearTrailsSimple() {
+        // [trails.obj1, trails.obj2].forEach(trail => {
+        //     const newGeometry = new THREE.BufferGeometry();
+        //     trail.geometry.dispose();
+        //     trail.geometry = newGeometry;
+        // });
+    }
+
+    function updateTelemetry() {
+        document.getElementById('timeValue').innerText = vars.time.toFixed(2);
+        // const distance = obj1.position.distanceTo(obj2.position);
+        // document.getElementById('distanceValue').innerText = distance.toFixed(2);
+        // statValues.minDistance = statValues.minDistance === 0 ? distance : Math.min(statValues.minDistance, distance);
+        // statValues.maxDistance = Math.max(statValues.maxDistance, distance);
+        // document.getElementById('minDistanceValue').innerText = statValues.minDistance.toFixed(2);
+        // document.getElementById('maxDistanceValue').innerText = statValues.maxDistance.toFixed(2);
+        // document.getElementById('r1Value').innerText = vars.r1.toFixed(2);
+        // document.getElementById('r2Value').innerText = vars.r2.toFixed(2);
+    }
+
+    bindEvents();
+    setup();
+    animate();
+
+
+</script>
+

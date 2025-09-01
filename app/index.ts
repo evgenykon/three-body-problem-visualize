@@ -23,7 +23,8 @@ app.get('/', function(req:any, res:any){
 app.get('/sim/:id', function(req:any, res:any){
   const allowedSims: string[] = [
     "01-mech-acceleration",
-    "02-mech-gravity"
+    "02-mech-gravity",
+    "02-mech-gravity-exp-1"
   ];
   if (!allowedSims.includes(req.params.id)) {
     return res.status(404).send("Not Found");
